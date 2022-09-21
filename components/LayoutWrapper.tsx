@@ -25,7 +25,7 @@ const LayoutWrapper = ({ children }: Props) => {
                   alt="bbangjo"
                   className="mr-2 h-8 w-8 rounded-full"
                 />
-                <span>bbangjo</span>
+                <span className="font-cairo">bbangjo</span>
               </div>
             </Link>
           </div>

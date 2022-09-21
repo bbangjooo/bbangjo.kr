@@ -30,6 +30,7 @@ module.exports = {
       },
       fontFamily: {
         sans: ['InterVariable', ...defaultTheme.fontFamily.sans],
+        cairo: ['Cairo-Play'],
       },
       colors: {
         primary: colors.blue,
