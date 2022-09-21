@@ -3,7 +3,7 @@ User-agent: *
 Allow: /
 
 # Host
-Host: https://tomray.dev
+Host: https://bbangjo.kr
 
 # Sitemaps
-Sitemap: https://tomray.dev/sitemap.xml
+Sitemap: https://bbangjo.kr/sitemap.xml

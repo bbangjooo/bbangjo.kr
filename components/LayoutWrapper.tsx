@@ -21,11 +21,11 @@ const LayoutWrapper = ({ children }: Props) => {
             <Link href="/" aria-label={siteMetadata.headerTitle}>
               <div className="flex items-center py-4 pr-6 text-xl font-bold text-gray-700 hover:text-gray-900 dark:text-white">
                 <img
-                  src="/static/images/profile.jpg"
-                  alt="Tom Ray"
+                  src="/static/images/profile.png"
+                  alt="bbangjo"
                   className="mr-2 h-8 w-8 rounded-full"
                 />
-                <span>Tom Ray</span>
+                <span>bbangjo</span>
               </div>
             </Link>
           </div>
