@@ -1,4 +1,4 @@
-![tailwind-nextjs-banner](/public/static/images/twitter-card.png)
+![tailwind-nextjs-banner](/public/static/images/twitter-card.jpeg)
 
 # Tailwind Nextjs Starter Blog
 

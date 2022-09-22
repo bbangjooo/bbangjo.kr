@@ -9,7 +9,7 @@ const siteMetadata = {
   siteRepo: 'https://github.com/bbangjooo/bbangjo.kr',
   siteLogo: '/static/images/profile.png',
   image: '/static/images/avatar.png',
-  socialBanner: '/static/images/twitter-card.png',
+  socialBanner: '/static/images/twitter-card.jpeg',
   github: 'https://github.com/bbangjooo',
   twitter: 'https://twitter.com/bbangjo__',
   locale: 'en-US',
