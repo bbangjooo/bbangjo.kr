@@ -1,5 +1,6 @@
 const siteMetadata = {
-  title: 'bbangjo - Love to investigate fundamental things',
+  title:
+    "Welcome to bbnagjo's blog! I'm open-source minded and would like to share my internal knowledges and insights for free",
   author: 'bbangjo',
   headerTitle: 'bbangjo',
   description: "bbangjo's playground",
