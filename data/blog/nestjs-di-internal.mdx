@@ -67,14 +67,14 @@ DI는 IoC(Inversion of Control)의 수단이다. 이를 위해서 Nestjs가 depe
 
 Nestjs는 프로젝트 생성 시 `main.ts` 파일을 제공하고, 그 파일에는 `bootstrap` 이라는 간단한 함수가 있다.
 
-```
+```typescript
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule)
   app.listen(3000, () => {
-    console.info('[+] 🚀 Server listening on 3000');
-  });
+    console.info('[+] 🚀 Server listening on 3000')
+  })
 }
-bootstrap();
+bootstrap()
 ```
 
 `bootstrap`은 또 app을 만들고, app을 listen하게 하는 간단한 함수다. 우리가 주목할 곳은 ‘app을 만드는’ 부분인 `NestFactory.create` 함수이다.
@@ -97,7 +97,7 @@ main.ts에서 bootstrap을 실행했고, `NestFactory.create` 함수 내부에�
 
 [**@nestjs/core/scanner.ts#L70**](https://github.com/nestjs/nest/blob/220b098e220b1e3471493d036425d525a951e566/packages/core/scanner.ts#L70)**:**
 
-```
+```typescript
   public async scan(module: Type<any>) {
     await this.registerCoreModule();
     // ==== [*] Important ====
@@ -114,7 +114,7 @@ main.ts에서 bootstrap을 실행했고, `NestFactory.create` 함수 내부에�
 
 [**@nestjs/core/scanner.ts#L80**](https://github.com/nestjs/nest/blob/220b098e220b1e3471493d036425d525a951e566/packages/core/scanner.ts#L80)**: scanForModules**
 
-```
+```typescript
 public async scanForModules(
     moduleDefinition:
       | ForwardReference
@@ -172,7 +172,7 @@ public async scanForModules(
 
 [**@nestjs/core/scanner.ts#L414**](https://github.com/nestjs/nest/blob/220b098e220b1e3471493d036425d525a951e566/packages/core/scanner.ts#L414)**: reflectMetadata**
 
-```
+```typescript
 reflectMetadata(metadataKey, metatype) {
         return Reflect.getMetadata(metadataKey, metatype) || [];
     }
@@ -182,7 +182,7 @@ reflectMetadata(metadataKey, metatype) {
 
 이 패키지의 내용을 표준에 추가하자는 수요가 많음에도, Decorator가 아직 TC39 프로세스 중 [Stage 3](https://github.com/tc39/proposal-decorators)에 있어서인지, ECMA 스크립트 표준에 이 패키지 적용을 제안하는 [proposal을 아직 제출하지 않은 것 같다.](https://github.com/rbuckton/reflect-metadata/issues/9)
 
-```
+```typescript
 this.reflectMetadata(constants_1.MODULE_METADATA.IMPORTS, moduleDefinition)
 
 /*
@@ -200,18 +200,18 @@ export const MODULE_METADATA = {
 
 [**@nestjs/common/decorators/modules/module.decorator.ts#L18**](https://github.com/nestjs/nest/blob/220b098e220b1e3471493d036425d525a951e566/packages/common/decorators/modules/module.decorator.ts#L18)**:**
 
-```
+```typescript
 export function Module(metadata: ModuleMetadata): ClassDecorator {
-  const propsKeys = Object.keys(metadata);
-  validateModuleKeys(propsKeys);
+  const propsKeys = Object.keys(metadata)
+  validateModuleKeys(propsKeys)
 
   return (target: Function) => {
     for (const property in metadata) {
       if (metadata.hasOwnProperty(property)) {
-        Reflect.defineMetadata(property, (metadata as any)[property], target);
+        Reflect.defineMetadata(property, (metadata as any)[property], target)
       }
     }
-  };
+  }
 }
 
 /*
@@ -228,10 +228,10 @@ export class AppModule {}
 
 데코레이터는 class declaration이 실행될 때 함께 실행되고, top-level 스코프에서 클래스를 정의했기 때문에 `import` statement가 실행될 때 데코레이터가 실행되면서 메타데이터가 정의된다. 즉, main.ts에서 `AppModule`을 import할 때, `AppModule` 클래스 정의가 실행되면서 `@Module` 데코레이터가 실행되고, 메타데이터가 등록된다. `app.module.ts`에서 import된 모든 모듈과 컨트롤러와 프로바이더에 대해서도 같은 일이 일어나기 때문에, `bootstrap` 이 실행되기 전 필요한 메타데이터가 모두 정의된 상태가 된다.
 
-```
+```typescript
 // Decorator executed when it's target is imported
 // if target is declared in top-level scope
-import { AppModule } from './app/app.module';
+import { AppModule } from './app/app.module'
 ```
 
 이제 어떻게 Nestjs가 scan할 모듈을 찾고, 이를 `NestContainer`에 추가하는지 알았다. `scanForModules`가 끝나면 container에 대략 다음과 같은 모습으로 Module이 저장되어 있다.
@@ -244,7 +244,7 @@ Module을 다 찾았으니, 이제 모듈 간 의존성을 스캔할 차례다.
 
 [**@nestjs/core/scanner.ts#L158**](https://github.com/nestjs/nest/blob/master/packages/core/scanner.ts#L158)**: scanModulesForDependencies**
 
-```
+```typescript
 public async scanModulesForDependencies(
     modules: Map<string, Module> = this.container.getModules(),
   ) {
