@@ -16,6 +16,9 @@
   p {
     @apply mb-4;
   }
+  img {
+    margin: 2em auto;
+  }
 }
 
 .task-list-item::before {
