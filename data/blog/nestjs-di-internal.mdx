@@ -298,7 +298,7 @@ export const MODULE_METADATA = {
 
 Nestjs 분석을 통해 내부적으로 어떻게 **Dependency Injection**이 이루어지고 있는지 알 수 있었다. 그리고 코드를 분석하는 과정에서 `NestContainer`가 의존성 관련 모든 정보를 가지고 있다는 사실도 알았다.
 
-container는 `NestApplication`의 프로퍼티로 접근 가능하고, `NestFactory.create`의 리턴값이 `NestApplication`의 프록시를 씌운 것이기 때문에 애플리케이션 코드에서 `app.container` 로 접근이 가능하다. 그래서 실제로 container에 접근해서 의존성 관계를 [시각적으로 보여주는 패키지](https://github.com/jmcdo29/nestjs-spelunker)도 있다.
+Typescript의 `private` 키워드는 js로 트랜스파일되면서 사라지기 때문에 `any` 타입의 container는 NestApplication의 프로퍼티로 접근 가능하고, `NestFactory.create`의 리턴값이 `NestApplication`의 프록시를 씌운 것이기 때문에 애플리케이션 코드에서 `app.container` 로 접근이 가능하다. 그래서 실제로 container에 접근해서 의존성 관계를 [시각적으로 보여주는 패키지](https://github.com/jmcdo29/nestjs-spelunker)도 있다.
 
 Nestjs는 라우팅하는 방식도 재밌어서, 이것도 나중에 글로 쓰면 좋을 것 같다. 오랜만에 꿀잼 분석한 것 같아서 기분이 좋다. 긴 글 읽어주셔서 감사합니다!
 
