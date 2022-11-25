@@ -16,7 +16,7 @@ images: ['/static/images/nestjs-internal.jpeg']
 
 사실 Nodejs에는 딱히 ‘구조’적인 서버사이드 프레임워크랄 게 없었다. 대표적으로 [Express](https://expressjs.com/ko/)는 자유도의 끝판왕이라 프로젝트가 커질수록 개발자 커뮤니티에서 암묵적인 패턴을 만드는 주객이 전도된(?) 상황이 발생하게 된다. Nestjs가 해결하고자 했던 문제가 바로 ‘구조’ 문제이고, 그러다 보니 Spring과 유사한 모습을 띈다는 평가가 많다. 실제로 Nestjs는 under the hood에서 Express를 http server 프레임워크로 사용하고 이를 추상화해서 우리에게 제공해준다.
 
-최근 [모 개발자의 insane한 슬랙봇 개발기](https://velog.io/@hanchchch/진심으로-업무-자동화-슬랙봇-만들기-1)를 읽고 나도 사이드 프로젝트로 만들어 보고 싶은 패키지가 생겨 내부적인 원리를 알아보고자 Nestjs internal을 공부하게 됐다. 그 중에서 이번 글에서는 Nestjs의 핵심인 **의존성 주입(Dependency Injection)**이 내부적으로 어떻게 이뤄지는지 알아보려고 한다.
+최근 [모 개발자의 insane한 슬랙봇 개발기](https://velog.io/@hanchchch/진심으로-업무-자동화-슬랙봇-만들기-1)를 읽고 나도 사이드 프로젝트로 만들어 보고 싶은 패키지가 생겨 내부적인 원리를 알아보고자 Nestjs internal을 공부하게 됐다. 그 중에서 이번 글에서는 Nestjs의 핵심인 **의존성 주입**(Dependency Injection)이 내부적으로 어떻게 이뤄지는지 알아보려고 한다.
 
 **Let’s Deep Dive!** 🚀
 
@@ -77,11 +77,11 @@ async function bootstrap() {
 bootstrap()
 ```
 
-`bootstrap`은 또 app을 만들고, app을 listen하게 하는 간단한 함수다. 우리가 주목할 곳은 ‘app을 만드는’ 부분인 `NestFactory.create` 함수이다.
+`bootstrap`은 app을 만들고, app을 listen하게 하는 간단한 함수다. 우리가 주목할 곳은 ‘app을 만드는’ 부분인 `NestFactory.create` 함수이다.
 
 - [**@nestjs/core/nest-factory.ts#L65**](https://github.com/nestjs/nest/blob/master/packages/core/nest-factory.ts#L65)**: create**
 
-`NestContainer` 는 모듈들의 모-든 정보를 담는 클래스다. `NestContainer` 의 인스턴스인 `container` 와 우리가 인자로 넘겨줬던 `AppModule` 인 `module` 을 가지고 `initialize` 함수를 호출한다.
+`NestContainer` 의 인스턴스인 `container` 와 우리가 인자로 넘겨줬던 `AppModule` 인 `module` 을 가지고 `initialize` 함수를 호출한다. `NestContainer` 는 모듈들의 모-든 정보를 담는 클래스로, 앱의 구성도 역할을 한다.
 
 - [**@nestjs/core/nest-factory.ts#L155**](https://github.com/nestjs/nest/blob/220b098e220b1e3471493d036425d525a951e566/packages/core/nest-factory.ts#L155)**: initialize**
 
@@ -91,11 +91,11 @@ bootstrap()
 
 이제 scan이 어디서 이루어지는지 알았다. 지금까지 콜스택은 다음과 같다.
 
-![img](https://cdn-images-1.medium.com/max/1600/1*1mZ4ZSGyjPEzss6zrm6-Dw.png)Nodejs 디버거 콜스택
+![img](https://cdn-images-1.medium.com/max/1600/1*1mZ4ZSGyjPEzss6zrm6-Dw.png)
 
-main.ts에서 bootstrap을 실행했고, `NestFactory.create` 함수 내부에서 `initialize` 를 실행했다. 이제 `initialize`에서 DependenciesScanner의 `scan` 메소드까지 실행해야 한다. `scan` 함수는 우리가 인자로 제공했던 `AppModule` 을 시작으로 모듈과 모듈의 의존성을 스캔한다.
+main.ts에서 bootstrap을 실행했고, `NestFactory.create` 함수 내부에서 `initialize` 를 실행했다. 이제 `initialize`에서 DependenciesScanner의 `scan` 메소드까지 실행해야 한다.
 
-[**@nestjs/core/scanner.ts#L70**](https://github.com/nestjs/nest/blob/220b098e220b1e3471493d036425d525a951e566/packages/core/scanner.ts#L70)**:**
+[**@nestjs/core/scanner.ts#L70**](https://github.com/nestjs/nest/blob/220b098e220b1e3471493d036425d525a951e566/packages/core/scanner.ts#L70)**: scan**
 
 ```typescript
   public async scan(module: Type<any>) {
@@ -110,7 +110,9 @@ main.ts에서 bootstrap을 실행했고, `NestFactory.create` 함수 내부에�
   }
 ```
 
-`NestContainer` 는 모든 모듈의 모-든 정보를 담는 클래스다. `scanForModules` 는 `imports`를 이용해 모듈들을 순회하면서 container에 모듈의 정보를 담는 함수이다.
+`scan` 함수는 우리가 인자로 제공했던 `AppModule` 을 시작으로 DFS 알고리즘으로 모듈을 탐색하며 `NestContainer`에 이를 저장하고, 모듈 간 의존성을 확립하는 함수이다.
+
+`scanForModules` 는 전자에 해당하며, `imports`를 이용해 모듈들을 순회하면서 container에 모듈의 정보를 담는 함수이다.
 
 [**@nestjs/core/scanner.ts#L80**](https://github.com/nestjs/nest/blob/220b098e220b1e3471493d036425d525a951e566/packages/core/scanner.ts#L80)**: scanForModules**
 
@@ -178,9 +180,9 @@ reflectMetadata(metadataKey, metatype) {
     }
 ```
 
-클래스에 메타데이터를 consistent한 방식으로 지정할 수 있도록 하는 [reflect-metdata](https://www.npmjs.com/package/reflect-metadata) 패키지가 있다. `Reflect.getMetadata`는 이 패키지에서 제공하는 API 중 하나다.
+클래스에 메타데이터를 consistent한 방식으로 지정하는 [reflect-metdata](https://www.npmjs.com/package/reflect-metadata) 패키지가 있다. `Reflect.getMetadata`는 이 패키지에서 제공하는 API 중 하나다.
 
-이 패키지의 내용을 표준에 추가하자는 수요가 많음에도, Decorator가 아직 TC39 프로세스 중 [Stage 3](https://github.com/tc39/proposal-decorators)에 있어서인지, ECMA 스크립트 표준에 이 패키지 적용을 제안하는 [proposal을 아직 제출하지 않은 것 같다.](https://github.com/rbuckton/reflect-metadata/issues/9)
+_ps. 이 패키지의 내용을 표준에 추가하자는 수요가 많음에도, Decorator가 아직 TC39 프로세스 중 [Stage 3](https://github.com/tc39/proposal-decorators)에 있어서인지, ECMA 스크립트 표준에 이 패키지 적용을 제안하는 [proposal을 아직 제출하지 않은 것 같다.](https://github.com/rbuckton/reflect-metadata/issues/9)_
 
 ```typescript
 this.reflectMetadata(constants_1.MODULE_METADATA.IMPORTS, moduleDefinition)
@@ -196,7 +198,7 @@ export const MODULE_METADATA = {
 */
 ```
 
-즉 이 코드는 해당 모듈에 정의된 메타데이터 중 `imports`에 해당하는 값을 가져오는 코드다. 그럼 이 메타데이터는 어디서 정의하는 걸까? 여기서 Nestjs의 Decorator magic이 사용된다.
+이 코드는 해당 모듈에 정의된 메타데이터 중 `imports`에 해당하는 값을 가져오는 코드다. 그럼 이 메타데이터는 어디서 정의하는 걸까? 여기서 Nestjs의 Decorator magic이 사용된다.
 
 [**@nestjs/common/decorators/modules/module.decorator.ts#L18**](https://github.com/nestjs/nest/blob/220b098e220b1e3471493d036425d525a951e566/packages/common/decorators/modules/module.decorator.ts#L18)**:**
 
@@ -286,9 +288,9 @@ export const MODULE_METADATA = {
 
 마찬가지로 메타데이터 바탕으로 `imports`, `providers`, `controllers`, `exports`를 가져와서 각 모듈에 추가해야 한다. 이전 함수와 같은 작업을 반복하는 부분이므로 간단히 넘어가고, 결과는 다음과 같다.
 
-![img](https://cdn-images-1.medium.com/max/1600/1*8QwmQ5ANlOfrIf1ETIiFQw.png)AppModule 예시
+![img](https://cdn-images-1.medium.com/max/1600/1*8QwmQ5ANlOfrIf1ETIiFQw.png)
 
-`scanForModules`와 `scanModulesForDependencies`의 차이는 전자는 `NestContainer`에 module을 추가하는 과정이고, 후자는 그렇게 추가한 module에 controller, provider 등을 추가한다는 점이다.
+`scanForModules`와 `scanModulesForDependencies`의 차이는 전자는 `NestContainer`에 module을 추가하는 과정이고, 후자는 그렇게 추가한 module에 controller, provider 등을 추가하는 과정이라는 점이다.
 
 이 과정까지 거치면, 드디어 모든 모듈 간 의존성이 확립되었다!
 
