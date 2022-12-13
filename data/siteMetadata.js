@@ -6,7 +6,7 @@ const siteMetadata = {
   description: "bbangjo's playground",
   language: 'en-us',
   theme: 'system', // system, dark or light
-  siteUrl: 'https://bbangjo.kr',
+  siteUrl: 'https://blog.bbangjo.kr',
   siteRepo: 'https://github.com/bbangjooo/bbangjo.kr',
   siteLogo: '/static/images/profile.png',
   image: '/static/images/avatar.png',
