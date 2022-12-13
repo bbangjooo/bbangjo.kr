@@ -12,7 +12,6 @@ const ContentSecurityPolicy = `
   connect-src *;
   font-src *;
   frame-src giscus.app;
-  frame-ancestors *;
 `
 
 const securityHeaders = [
