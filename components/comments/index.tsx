@@ -41,19 +41,7 @@ const Comments = ({ frontMatter }: Props) => {
       term = frontMatter.title
       break
   }
-  return (
-    <div id="comment">
-      {siteMetadata.comment && siteMetadata.comment.provider === 'giscus' && (
-        <GiscusComponent mapping={term} />
-      )}
-      {siteMetadata.comment && siteMetadata.comment.provider === 'utterances' && (
-        <UtterancesComponent issueTerm={term} />
-      )}
-      {siteMetadata.comment && siteMetadata.comment.provider === 'disqus' && (
-        <DisqusComponent frontMatter={frontMatter} />
-      )}
-    </div>
-  )
+  return <div id="comment"></div>
 }
 
 export default Comments
