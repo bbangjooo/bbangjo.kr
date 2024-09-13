@@ -269,9 +269,18 @@ function wrapSafe(filename, content, cjsModuleInstance) {
 }
 ```
 
-코드 상에 `Module`에 `wrapper` 프로퍼티를 정의하면서 `patched` 의 값이 true가 된다. `Module.wrap`을 호출하고 wrapping 된 함수를 `vm`에서 실행한 후 그 결과를 반환하는 식이다.
+`patched`가 true라면 `Module.wrap`을 호출하고 wrapping 된 함수를 `vm`에서 실행한 후 그 결과를 반환하고, 아니라면 컴파일하는 식이다.
 
-**wrapper, wrap:**
+```bash
+~/node/out/Release$ ./node ../../test.js
+patched: false
+hello world
+```
+
+node internal 디버깅하는 법을 잘 몰라서, 그냥 node 패치해서 `patched` 값 출력하도록 했다. 그러니 false가 나옴.. 이유는 알아봐야겠다.
+어쨋든 지금의 경우에는 `try catch` 로직을 탄다는 뜻이다.
+
+**wrap:**
 
 ```js
 let wrap = function (script) {
@@ -281,11 +290,9 @@ let wrap = function (script) {
 const wrapper = ['(function (exports, require, module, __filename, __dirname) { ', '\n});']
 ```
 
-![image](https://user-images.githubusercontent.com/51329156/152758635-d38c4c1d-cd48-4a15-b22a-f794ffced769.png)
-
 글 초반부 코드에서 봤던 찾았다! 생각보다 허무하게 만들어주고 있었다. ㅋㅋㅋㅋ 그냥 파일 내용(코드)을 string concat 해서 `wrapper` 로 만들고 이를 vm 인스턴스에서 실행한다.
 
-마지막으로 `Module._compile` 내부적으로 선언했던 `exports, require, module, filename, dirname`을 인자로 넘겨주며 함수를 실행하고 결과값을 리턴한다.
+마지막으로 `Module._compile` 내부적으로 선언했던 `exports, require, module, filename, dirname`을 vm compile 인자로 넘겨준다.
 
 ```js
 // our.js
