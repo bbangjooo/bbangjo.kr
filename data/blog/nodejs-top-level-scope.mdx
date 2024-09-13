@@ -344,9 +344,15 @@ function a() {
 console.log(a().arguments[1] == require) // true
 ```
 
-## Conclusion
+## 마무리
 
-브라우저와 nodejs 인터프리터의 경우에는 top-level scope가 global이다(브라우저는 window). 그리고 top-level scope에서 `caller`를 호출하면 `null`을 반환한다. 하지만 `node our.js`를 실행하는 경우는 nodejs 표준에 따라 코드를 모듈화하게 되고, 우리 코드는 그 모듈 안에서 실행되기 때문에 `caller`를 호출이 가능하다. 모듈의 `exports, require, module, __filename, __dirname` 파라미터는 모두 global 밖의 값이기 때문에 `global`에 있는 모든 값을 지우더라도 `require`는 호출이 가능하다 !!
+결론: node는 코드를 실행할 때 모듈화해주고, 이를 직접 확인해볼 수 있다.
+
+오랜만에 큰 의미는 없지만 도파민은 터지는 공부하니까 재밌다.
+
+내가 분석한 건 cjs, 즉 CommonJS 모듈 기반 코드이다. 하지만, 요즘 node 버전에서는 ES module 지원이 되고 이게 클라, 서버 모두의 JS 모듈 표준이다.
+
+ps. ES module을 사용하면서 엄청 오래된 패키지를 사용하면 import할 수 없는 이유가 이 때문이다.
 
 ### Reference
 
