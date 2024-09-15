@@ -1,10 +1,11 @@
 ---
-title: WebRTC - What is Signaling?
-h1: WebRTC - What is Signaling?
+title: WebRTC deep dive
+
+h1: WebRTC deep dive
 date: '2022-07-20'
 lastmod: '2022-07-20'
 draft: false
-summary: WebRTC와 Web에서의 P2P 통신에 관하여
+summary: WebRTC, Web에서의 P2P 통신에 관하여
 images: ['/static/images/WebRTC/webRTC.jpeg']
 ---
 
@@ -16,47 +17,44 @@ images: ['/static/images/WebRTC/webRTC.jpeg']
 
 _출처: [MDN 문서](https://developer.mozilla.org/ko/docs/Web/API/WebRTC_API)_
 
-WebRTC는 서버를 거치지 않고(최대한) P2P로 데이터를 주고받는 기술이다. 데이터는 텍스트, 오디오, 비디오 등 임의의 바이너리 데이터가 될 수 있기 때문에 실시간 파일 교환, 화상 채팅같은 다양한 분야에서 WebRTC를 사용할 수 있다. 기존에 사용되던 실시간 p2p 통신 기술은 구글의 주도 하에 WebRTC라는 표준으로 자리잡았다. 이 과정에서 킹갓구글은 WebRTC의 근간이 되는 기술의 독점 기업들을 인수하면서 오픈소스 프로젝트로 풀어버렸다.. 덕분에 우리는 미디어 스트림을 송수신하는 고도의 기술을 무료로, 크롬 브라우저에서 사용할 수 있게 됐다!
+WebRTC는 **서버를 거치지 않고(최대한) P2P로 데이터를 주고받는 기술**이다. 데이터는 텍스트, 오디오, 비디오 등 임의의 바이너리 데이터가 될 수 있기 때문에 실시간 파일 교환, 화상 채팅같은 다양한 분야에서 WebRTC를 사용할 수 있다.
+
+기존에 사용되던 실시간 p2p 통신 기술은 구글의 주도 하에 WebRTC라는 표준으로 자리잡았다. 이 과정에서 킹갓구글은 WebRTC의 근간이 되는 기술의 독점 기업들을 인수하면서 오픈소스 프로젝트로 풀어버렸다.. 덕분에 우리는 미디어 스트림을 송수신하는 고도의 기술을 무료로, 브라우저에서 사용할 수 있게 됐다!
 
 ![](https://media3.giphy.com/media/3o6Zt6KHxJTbXCnSvu/giphy.gif?cid=ecf05e474ymi2xn13bkm56e05lk59kxl4gz97pabhjk2mkhl&rid=giphy.gif&ct=g)
 
-WebRTC를 이용해 서로 다른 네트워크에 위치한 2개의 디바이스가 p2p 통신을 하기 위해서는 각 디바이스들의 네트워크 상의 위치(IP, port, ..)와 미디어 capability에 대한 협의가 필요하다. 이 프로세스를 Signaling이라 부르고, 각 디바이스들을 Signaling server에 연결시킨다. 이 서버를 통해 각 디바이스들이 **negotiation**(협의) 메세지를 교환한다.
+## Overview
 
-## 사전 지식
+WebRTC를 이용해 서로 다른 네트워크에 위치한 2개의 디바이스가 p2p 통신을 하기 위해서는 각 디바이스들의 네트워크 상의 위치(IP, port, ..)와 미디어 capability에 대한 협의가 필요하다. 이 협의 프로세스를 **Signaling**이라 부르고, Signaling 서버를 통해 각 디바이스들이 **negotiation**(협의) 메세지를 교환한다.
 
-**서버-클라이언트 통신, NAT의 도입 배경에 관한 설명이므로 잘 아는 사람들은 NAT traversal로 패스해도 된다!**
+## 깨알 네트워크 상식
 
-먼저 기존의 서버-클라이언트 간 통신을 생각해보자. 이를 위해서는 약간의 네트워크 지식이 필요하다. 어렵진 않다. 인터넷 공간에서 서로 통신하기 위해서는 고유의 주소인 IP가 필요하다. 그리고 이 IP 주소와 port 를 조합하여 데이터를 어떤 호스트에게, 어떤 프로세스로 전달할 지 결정하게 된다. 하지만 이 숫자들을 다 외울 수는 없기 때문에 별명, 라벨의 용도로 도메인 네임을 사용한다. 도메인 네임을 보고 실제 IP 주소를 얻는 과정은 브라우저와 DNS 서버가 알아서 해주기 때문에 우리는 서버의 실제 IP를 모르고 도메인 네임만 알아도 서로 통신을 할 수 있다. 아래 그림을 보면 사용자가 직접 개입하는 과정은 사실상 1번과 9번밖에 없다.
+**NAT의 도입 배경에 관한 설명이므로 잘 아는 사람들은 다음 섹터로 패스해도 된다!**
+
+서버-클라이언트 간 통신을 생각해보자. 인터넷 공간에서 서로 통신하기 위해서는 IP가 필요하다. 그리고 이 IP 주소와 port 를 조합하여 데이터를 어떤 호스트에게, 어떤 프로세스로 전달할 지 결정하게 된다. 하지만 이 숫자들을 다 외울 수는 없기 때문에 별명, 라벨의 용도로 도메인 네임을 사용한다. 도메인 네임을 보고 실제 IP 주소를 얻는 과정은 브라우저와 DNS 서버가 알아서 해주기 때문에 우리는 서버의 실제 IP를 모르고 도메인 네임만 알아도 서로 통신을 할 수 있다. 아래 그림을 보면 사용자가 직접 개입하는 과정은 사실상 1번밖에 없다.
 
 ![](https://d1.awsstatic.com/Route53/how-route-53-routes-traffic.8d313c7da075c3c7303aaef32e89b5d0b7885e7c.png)
 
 _출처: [AWS Route53](https://aws.amazon.com/ko/route53/what-is-dns/)_
 
-여기서 말하는 IP 주소는 **공인 IP주소**이다. findip.kr 등 ip 확인 사이트에서 확인하는 바로 그 주소다. 이 주소가 인터넷 공간에서 실제로 접근할 수 있는, ISP(skt, kt)가 제공해주는 IP 주소이다. 처음에 이 IP를 32bit로 만들었는데(IPv4) 과거와 달리 컴퓨터를 사용하는 사람들도 많아지고, 컴퓨터 뿐만 아니라 스마트폰도 고유의 식별 주소를 필요로 하게 됐다. 32bit 주소 공간이 부족해짐에 따라 64비트의 IP 주소 체계(IPv6)를 만들었지만 얼마 안 가 IPv6로 전환이 이루어지는데는 너무 오랜 시간이 걸린다는 것을 깨달았다. 그래서 똑똑한 사람들이 여러 컴퓨터(스마트폰, IoT, ..)가 같은 주소를 공유할 수 있는 방법인 `NAT(Network Address Translation)`을 만들었다. 자세한 내용은 [여기](https://docs.microsoft.com/ko-kr/azure/rtos/netx-duo/netx-duo-nat/chapter1)를 참고하면 좋을 것 같다. 간단하게 설명하면 NAT 라우터(대부분 wifi 기기)에서 LAN에 속한 기기들의 (**사설 IP**, port) 쌍이 (공인 IP, 특정 port)로 변환되는 방법이다.
+여기서 말하는 IP 주소는 **공인 IP주소**이다. 이 주소가 인터넷 공간에서 실제로 접근할 수 있는, ISP가 제공해주는 전세계 유일 IP 주소이다. 처음에 이 IP를 32bit로 만들었는데(IPv4) 시간이 지나면서 다양한 기기에서 고유 IP를 필요로 하게 됐다. 32bit 주소 공간이 부족해짐에 따라 64비트의 IP 주소 체계(IPv6)를 만들었지만 얼마 안 가 IPv6로 전환이 이루어지는데는 너무 오랜 시간이 걸린다는 것을 깨달았다. 그래서 똑똑한 사람들이 여러 컴퓨터(스마트폰, IoT, ..)가 같은 주소를 공유할 수 있는 방법인 `NAT(Network Address Translation)`을 만들었다. 자세한 내용은 [여기](https://docs.microsoft.com/ko-kr/azure/rtos/netx-duo/netx-duo-nat/chapter1)로. 간단하게 설명하면 NAT 라우터(대부분 wifi 기기)에서 LAN에 속한 기기들의 (**사설 IP**, port) 쌍이 (공인 IP, 특정 port)로 변환되는 방법이다.
 
 정리하자면, 다음과 같다.
 
 - 클라이언트는 서버와 통신할 때 DNS 서버의 도움으로 요청 보낼 서버의 공인 IP주소를 알 수 있음.
-- 실제 내가 할당받은 IP는 사설 IP임.(10.x.x.x, 172.16.x.x, 192.168.0.0). 그리고 이 IP 주소를 인터넷 공간에서 사용하기 위해서는 공인 주소로 변환이 필요하고 이 과정을 NAT라 함.
+- 내가 사용하는 IP는 사설 IP임.(10.x.x.x, 172.16.x.x, 192.168.0.0). 그리고 이 IP 주소를 인터넷 공간에서 사용하기 위해서는 공인 주소로 변환이 필요하고 이 과정을 NAT라 함.
 
 ## NAT traversal
 
-p2p 통신의 전제는 **상대 peer의 IP 주소를 아는 것**이다. NAT 뿐만 아니라 방화벽, 동적으로 IP를 할당하는 DHCP때문에 이 과정이 쉽지가 않다. 상대의 공인 IP를 알아내고, 연결된 사설 IP까지 알아내야 사용자를 특정할 수 있다. 다른 LAN에 연결된 두 사용자(브라우저)가 연결하기 위해서는 알아야 하는 IP가 총 4개다.
+p2p 통신의 전제는 **나와 상대 peer의 IP 주소를 아는 것**이다. 즉, 상대에게 이렇게 말할 수 있어야 한다.
 
-- 자신의 사설 IP
-- 자신의 공인 IP
-- 상대의 공인 IP
-- 상대의 사설 IP
+- 공인IP:PORT 이리로 보내면 라우터가 내 사설IP로 바꿔서 나한테 보내줄 거임~
 
-IP 주소 부족 문제를 해결하려고 도입했던 NAT가 p2p 통신에서는 매우 어지러운 상황을 만들게 된 것이다. 문서에서 재밌는 예시를 하나 들어줬다.
+이게 가능하려면 내 공인IP와 라우터가 변환한 PORT를 알아야 한다. 그래야 상대가 이 주소로 데이터를 보내고, 라우터도 그 데이터를 내 PC로 보내줄 수 있다.
 
-> This is like trying to mail a package to your friend Michelle by labeling it "Michelle" and dropping it in a mailbox when you don't know her address. You need to look up her address and include it on the package, or she'll wind up wondering why you forgot her birthday again.
+이처럼 라우터 뒤에 있는 사용자들을 연결할 방법을 찾는 과정을 **NAT traversal** 이라고 한다. 그리고 그 수단들로 `STUN`, `TURN`을 사용한다.
 
-출처: [MDN 문서](https://developer.mozilla.org/en-US/docs/Web/API/WebRTC_API/Session_lifetime#signaling)
-
-이처럼 라우터 뒤에서 사용자를 특정하기 어려운 상황에서 연결할 방법을 찾는 과정을 **NAT traversal** 이라고 한다. 즉, **NAT traversal**을 통해 WebRTC 커넥션에 필요한 정보 중 연결에 필요한 정보를 수집하는 것이다.
-
-## Info for the connection | ICE, STUN, TURN
+### STUN, TURN, ICE
 
 ![](https://wormwlrm.github.io/static/8506409830c6a1b03e1a2fd269918ec5/a6d36/1.png)
 
@@ -70,11 +68,12 @@ NAT traversal은 **STUN(Session Traversal Utilities for NAT)** 서버에 의해 
 
 Peer들은 연결에 필요한 각자의 정보들을 가지게 되고, 이를 이벤트 기반으로 교환한 후 서로의 위치를 식별하게 된다. 자세한 과정은 밑에서 다룬다!
 
-이제 실제로 교환하고 싶은 미디어 capability에 대한 협의가 이루어져야 한다. 어떤 코덱, 미디어 포맷을 사용할 수 있는지와 같은 내용이다.
+## Signaling
 
-## Media capability negotiation
+이제 실제로 교환하고 싶은 미디어 capability에 대한 협의가 이루어져야 한다. 어떤 코덱, 미디어 포맷을 사용할 수 있는지와 같은 내용이다. 미디어 capability를 협의하는 과정에서 사용되는 프로토콜은 **SDP**이고, 이 프로토콜을 따라 주고 받는 메세지를 **SDP message**라고 한다. 이 메세지를 Peer들에게 중계해주는 서버가 **Signaling server**이다.
 
-미디어 capability를 협의하는 과정에서 사용되는 프로토콜은 **SDP**이고, 이 프로토콜을 따라 주고 받는 메세지를 **SDP message**라고 한다.
+- STUN 서버는 공인 IP, PORT 식별에 사용되고
+- 그를 통해 알게 된 ICE 후보들 + a의 정보를 Signaling server를 통해 교환한다.
 
 `SDP(Session Description Protocol)`는 p2p 연결을 설명하는 표준 프로토콜로, 코덱, 송신 주소, 해상도 등을 포함한다. `SDP message`를 이용하면 상대에게 자신의 미디어 capability를 알릴 수 있다.
 
@@ -96,9 +95,9 @@ a=rtpmap:32 MPV/90000
 
 SDP는 Offer / Answer 모델로 이루어지는데 연결을 먼저 요청하는 peer가 offer를 발행해 상대에게 보내면 상대가 answer에 자신의 미디어 스펙을 포함한 SDP message를 보내는 방식이다.
 
-## Signaling process
+### Signaling process detail
 
-위에서 설명한 과정을 교환/협의 관점에서 좀 더 들여다 보자.
+위에서 설명한 과정을 좀 더 들여다 보자.
 
 [자세한 그림](https://www.w3.org/TR/webrtc/images/ladder-2party-simple.svg)이 있긴 한데,,, 좀 더 공부해서 보는 걸로 하고 일단은 아래 그림정도로만 이해해도 충분할 것 같다..
 
@@ -111,17 +110,17 @@ SDP는 Offer / Answer 모델로 이루어지는데 연결을 먼저 요청하는
   - `getUserMedia()` API를 사용하면 브라우저에서 허용/차단을 묻는 창이 뜬다. 허용을 누르면 stream에 허용한 track이 추가된다.(audio track, video track, ..)
   - `addStream()`은 이제 스펙에서 제거 됐으므로 `addTrack()`을 사용해야 한다. 연결 객체에 track, stream 정보를 추가한다.
   - `createOffer`, `createAnswer` 는 연결 객체에 추가된 track 정보를 바탕으로 SDP message를 생성하는 과정이다. 이 메세지를 주고받으면서 미디어 스펙에 대해 협의 할 수 있다.
-- STUN, TURN 서버를 이용해 구한 `ICECandidate`를 이벤트 기반으로 교환한다.
+- `ICECandidate`를 이벤트 기반으로 교환한다.
   - 자신의 `ICECandidate`를 발견하면 이벤트가 발생하고, 이를 시그널링 서버에 전송한다.
   - 이 과정에서 두 peer 간의 최적의 경로를 협상한다. - ICE가 최적의 경로를 찾는 방법은 [MDN 문서](https://developer.mozilla.org/en-US/docs/Glossary/ICE)에서 확인 가능하다.
 - 이 과정이 완료되면 `track` 이벤트가 발생하여 상대 peer의 미디어 스트림에 접근할 수 있게 되고, 그러면 p2p 통신이 시작된 것이다!
   - `addstream` 이벤트는 `track` 이벤트로 대체되었다.
 
-## The signaling server
+## P2P인데 웬 서버?
 
-위에서 설명했던 WebRTC 커넥션을 위한 과정을 실제로 수행할 서버, Signaling server가 필요하다.
+위에서 설명했던 P2P간 연결을 성립하려면, STUN 서버와 시그널링 서버가 필요하다.
 
-**❓ 엥? WebRTC 는 중간자없이 데이터 교환한다며?** **웬 Signaling Server?**
+**❓ 엥? WebRTC 는 중간자없이 데이터 교환한다며?** **웬 서버?**
 
 맞다. WebRTC는 '**데이터를 교환**'하는데에 중간자가 필요 없다. 시그널링은 '데이터를 교환'하기 전에 상대와 나를 인식하고 어떻게, 어떤 데이터를 주고받을지 결정하는 과정이다. 그래서 위에서 계속 설명한 과정이 끝나고 나면, 중간자 개입 없이 peer-to-peer 통신이 가능해진다!
 
@@ -135,29 +134,15 @@ WebRTC 표준에서는 시그널링 정보에 대한 전송 메커니즘을 명�
 
 출처: [MDN 문서](https://developer.mozilla.org/en-US/docs/Web/API/WebRTC_API/Signaling_and_video_calling)
 
-프린트해서 친구집까지 걸어가서 직접 입력해도 되고, 전서구를 사용해도 된다고 한다. ㅋㅋㅋㅋ
+프린트해서 친구집까지 걸어가서 직접 입력해도 되고, 전서구를 사용해도 된다고 한다.
 
 _It'd be very high latency but it could be done._ 이 핵심이 아닐까 싶다.
-
-`carrier pigeons` 에서 빵터졌다! ㅋㅋㅋ
-
-![](https://media3.giphy.com/media/ZqlvCTNHpqrio/giphy.gif?cid=ecf05e4742jk957npzm7fym3ux6qcsk4nukzqplf8c04ewgd&rid=giphy.gif&ct=g)
 
 ## 정리
 
 **시그널링**은 두 기기간에 통신 프로토콜, 채널, 미디어 포맷, 데이터 전송, 그리고 필요한 라우팅 정보같은 **control information**을 교환하는 과정이다. 크게 미디어 관련 정보를 포함한 `SDP message`, 사설 IP와 공인 IP를 포함한 `ICECandidate`로 구분할 수 있었다.
 
 시그널링 서버를 구현할 때는 WebRTC 스펙에 명세된 게 없기 때문에 상황에 맞게 합리적으로 선택할 수 있다.
-
-## 참고
-
-![img](https://miro.medium.com/max/1276/1*EPqC5bA4fkAWZ_vcYh-SPA.png)
-
-WebRTC를 이루는 프로토콜이다. 전송계층이 TCP인 부분은 시그널링과 관련된 것 같다. 실제 p2p 통신은 전송 계층에 UDP, 응용 계층에 (S)RTP를 사용한다. 그래서 다음 글에서는 와이어 샤크를 이용해서 패킷을 잡아보고 분석해보려고 한다.
-
-![](https://media3.giphy.com/media/8FPCEmtFxzk3d6yPaZ/giphy.gif?cid=ecf05e4703l9ti32xeoe57dfxkre7khi34frf9moh9qtt1q2&rid=giphy.gif&ct=g)
-
-급하게 써서 그런가 글이 상당히 난잡하다.. 계속 업데이트해야겠다!!
 
 ## References
 
