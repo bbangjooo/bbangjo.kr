@@ -3,7 +3,7 @@ title: 인생기록 - 1
 h1: 인생기록 - 1
 date: '2025-05-24'
 lastmod: '2025-05-24'
-draft: false
+draft: true
 summary: 시스템은 겁주기를 좋아한다.
 images: ['/static/images/nestjs-docker-production/nest-docker-production.png']
 ---
